@@ -3,17 +3,12 @@ package vie.core.domain
 import vie.core.data.Color
 import vie.core.data.Point
 
-class ColorResolver {
+class ColorResolver private constructor() {
 
     private var palette: ColorPalette? = null
 
-    fun setPalette(p: ColorPalette) {
-        palette = p
-    }
-
     fun colorName(i: ImageFrame, p: Point): String {
         val color = extractColor(i, p)
-
         val name = palette?.matchColor(color)
         return name ?: ""
     }
@@ -34,5 +29,18 @@ class ColorResolver {
         val a = bytes[pixelIndex + 3].toInt() and 0xFF
 
         return Color(r, g, b, a)
+    }
+
+    companion object {
+
+        private val instance = ColorResolver()
+
+        fun setPalette(palette: ColorPalette) {
+            instance.palette = palette
+        }
+
+        fun colorName(frame: ImageFrame, point: Point): String {
+            return instance.colorName(frame, point)
+        }
     }
 }
