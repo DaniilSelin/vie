@@ -15,7 +15,7 @@ class ColorResolver {
         val color = extractColor(i, p)
 
         val name = palette?.matchColor(color)
-        return name
+        return name ?: ""
     }
 
     private fun extractColor(frame: ImageFrame, p: Point): Color {
