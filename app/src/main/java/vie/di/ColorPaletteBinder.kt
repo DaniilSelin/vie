@@ -2,11 +2,12 @@ package vie.di
 
 import vie.core.domain.ColorPalette
 import vie.core.impl.StandartPalette
+import vie.core.domain.ColorResolver
 
 class ColorPaletteBinder {
-    fun bindDefault(): ColorPalette {
+    fun bindDefault() {
         val implPalette = StandartPalette()
         implPalette.load("")
-        return implPalette
+        ColorResolver.setPalette(implPalette)
     }
 }

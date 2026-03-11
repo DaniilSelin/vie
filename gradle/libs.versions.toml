@@ -10,9 +10,6 @@ kotlin = "2.0.21"
 composeBom = "2024.09.00"
 
 [libraries]
-<<<<<<< HEAD
-androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
-=======
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2" }
 androidx-camera-core = { module = "androidx.camera:camera-core" }
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle" }
@@ -20,7 +17,6 @@ androidx-camera-view = { module = "androidx.camera:camera-view" }
 androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-foundation = { module = "androidx.compose.foundation:foundation" }
->>>>>>> origin/feature/camera_screen
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }

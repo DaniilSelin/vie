@@ -1,7 +1,6 @@
 package vie.feature.camera
 
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.Preview
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -22,25 +21,29 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import java.util.concurrent.Executors
+
 import vie.feature.navigation.BottomNavigationBar
 import vie.feature.navigation.Tab
+
+import vie.core.impl.CameraFrameAdapter
+import vie.core.domain.ColorResolver
+import vie.core.data.Point
 
 @Composable
 fun CameraScreen(
     selectedTab: Tab,
     onTabSelected: (Tab) -> Unit
 ) {
+
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val cameraPermissionState = rememberCameraPermissionState()
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
-    // ВРЕМЕННЫЕ ЗНАЧЕНИЯ - ЗАМЕНИТЬ НА ЛОГИКУ ОПРЕДЕЛЕНИЯ ЦВЕТА
-    val rgbValue = "128 128 128"
-    val hexValue = "#808080"
-    val colorName = "Светло-серый"
+    var rgbValue by remember { mutableStateOf("") }
+    var hexValue by remember { mutableStateOf("") }
+    var colorName by remember { mutableStateOf("") }
 
-    // Запрос разрешения при первом запуске
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.hasPermission) {
             cameraPermissionState.launchPermissionRequest()
@@ -52,19 +55,19 @@ fun CameraScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 60.dp)
         ) {
-            // Верхняя панель с RGB и HEX
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
                     .background(Color.Black),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
                     text = "RGB: $rgbValue",
@@ -73,6 +76,7 @@ fun CameraScreen(
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(start = 16.dp)
                 )
+
                 Text(
                     text = "HEX: $hexValue",
                     color = Color.White,
@@ -82,45 +86,74 @@ fun CameraScreen(
                 )
             }
 
-            // Камера
             if (cameraPermissionState.hasPermission) {
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f)
                 ) {
-                    // PreviewView для камеры
+
                     AndroidView(
                         factory = { ctx ->
-                            PreviewView(ctx).apply {
-                                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                                cameraProviderFuture.addListener({
-                                    val cameraProvider = cameraProviderFuture.get()
 
-                                    // Preview
-                                    val preview = Preview.Builder().build()
-                                    preview.surfaceProvider = surfaceProvider
+                            val previewView = PreviewView(ctx)
 
-                                    // Используем заднюю камеру по умолчанию
-                                    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                            val cameraProviderFuture =
+                                ProcessCameraProvider.getInstance(ctx)
 
-                                    try {
-                                        cameraProvider.unbindAll()
-                                        cameraProvider.bindToLifecycle(
-                                            lifecycleOwner,
-                                            cameraSelector,
-                                            preview
-                                        )
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                    }
-                                }, ContextCompat.getMainExecutor(ctx))
-                            }
+                            cameraProviderFuture.addListener({
+
+                                val cameraProvider = cameraProviderFuture.get()
+
+                                val preview = Preview.Builder().build()
+                                preview.setSurfaceProvider(previewView.surfaceProvider)
+
+                                val analysis = ImageAnalysis.Builder()
+                                    .setBackpressureStrategy(
+                                        ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+                                    )
+                                    .build()
+
+                                analysis.setAnalyzer(cameraExecutor) { image ->
+
+                                    val frame = CameraFrameAdapter(image)
+
+                                    val p = Point(
+                                        frame.width / 2,
+                                        frame.height / 2
+                                    )
+
+                                    val name =
+                                        ColorResolver.colorName(frame, p)
+
+                                    colorName = name
+
+                                    image.close()
+                                }
+
+                                try {
+
+                                    cameraProvider.unbindAll()
+
+                                    cameraProvider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        CameraSelector.DEFAULT_BACK_CAMERA,
+                                        preview,
+                                        analysis
+                                    )
+
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+
+                            }, ContextCompat.getMainExecutor(ctx))
+
+                            previewView
                         },
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Квадрат для определения цвета (25x25 dp)
                     Box(
                         modifier = Modifier
                             .size(25.dp)
@@ -132,8 +165,9 @@ fun CameraScreen(
                             )
                     )
                 }
+
             } else {
-                // Заглушка если нет разрешения
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -141,13 +175,17 @@ fun CameraScreen(
                         .background(Color.DarkGray),
                     contentAlignment = Alignment.Center
                 ) {
+
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
                         Text(
                             text = "Нет доступа к камере",
                             color = Color.White,
                             fontSize = 18.sp
                         )
+
                         Spacer(modifier = Modifier.height(8.dp))
+
                         Text(
                             text = "Нажмите чтобы разрешить",
                             color = Color.White.copy(alpha = 0.7f),
@@ -160,13 +198,13 @@ fun CameraScreen(
                 }
             }
 
-            // Название цвета
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
+
                 Text(
                     text = colorName,
                     color = Color.White,
@@ -175,45 +213,32 @@ fun CameraScreen(
                 )
             }
 
-            // Кнопки управления камерой
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 32.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                // Кнопка галереи
+
                 Box(
                     modifier = Modifier
                         .size(50.dp)
                         .clip(CircleShape)
                         .background(Color.Gray)
-                        .clickable {
-                            // ЛОГИКА ОТКРЫТИЯ ГАЛЕРЕИ
-                        }
                 )
 
-                // Кнопка сделать фото
                 Box(
                     modifier = Modifier
                         .size(60.dp)
                         .clip(CircleShape)
                         .background(Color.White)
-                        .clickable {
-                            // ЛОГИКА СЪЕМКИ ФОТО
-                        }
                 )
 
-                // Кнопка разворота камеры
                 Box(
                     modifier = Modifier
                         .size(50.dp)
                         .clip(CircleShape)
-                        .background(Color.DarkGray)
-                        .clickable {
-                            // ЛОГИКА ПЕРЕКЛЮЧЕНИЯ КАМЕРЫ
-                        },
+                        .background(Color.DarkGray),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -225,7 +250,6 @@ fun CameraScreen(
             }
         }
 
-        // Нижняя панель навигации
         BottomNavigationBar(
             selectedTab = selectedTab,
             onTabSelected = onTabSelected,
@@ -233,7 +257,6 @@ fun CameraScreen(
         )
     }
 
-    // Освобождаем ресурсы при уничтожении
     DisposableEffect(Unit) {
         onDispose {
             cameraExecutor.shutdown()
