@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,7 +25,6 @@ import java.util.concurrent.Executors
 
 import vie.feature.navigation.BottomNavigationBar
 import vie.feature.navigation.Tab
-
 import vie.core.impl.CameraFrameAdapter
 import vie.core.domain.ColorResolver
 import vie.core.data.Point
@@ -34,15 +34,17 @@ fun CameraScreen(
     selectedTab: Tab,
     onTabSelected: (Tab) -> Unit
 ) {
-
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val cameraPermissionState = rememberCameraPermissionState()
-
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
     var rgbValue by remember { mutableStateOf("") }
     var hexValue by remember { mutableStateOf("") }
     var colorName by remember { mutableStateOf("") }
+    var currentColor by remember { mutableStateOf(Color.White) }
+    var isFrontCamera by remember { mutableStateOf(false) }
+
+    var cameraSelectorIndex by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.hasPermission) {
@@ -55,104 +57,114 @@ fun CameraScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 60.dp)
         ) {
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-                    .background(Color.Black),
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .background(Color.Black)
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "RGB: $rgbValue",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(start = 16.dp)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(currentColor)
+                        .border(1.dp, Color.White, RoundedCornerShape(8.dp))
                 )
 
-                Text(
-                    text = "HEX: $hexValue",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(end = 16.dp)
-                )
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = "RGB: $rgbValue",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "HEX: $hexValue",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
             if (cameraPermissionState.hasPermission) {
-
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f)
                 ) {
+                    key(cameraSelectorIndex) {
+                        AndroidView(
+                            factory = { ctx ->
+                                val previewView = PreviewView(ctx)
+                                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
 
-                    AndroidView(
-                        factory = { ctx ->
+                                cameraProviderFuture.addListener({
+                                    val cameraProvider = cameraProviderFuture.get()
 
-                            val previewView = PreviewView(ctx)
+                                    val preview = Preview.Builder().build()
+                                    preview.setSurfaceProvider(previewView.surfaceProvider)
 
-                            val cameraProviderFuture =
-                                ProcessCameraProvider.getInstance(ctx)
+                                    val analysis = ImageAnalysis.Builder()
+                                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                        .build()
 
-                            cameraProviderFuture.addListener({
+                                    analysis.setAnalyzer(cameraExecutor) { image ->
+                                        val frame = CameraFrameAdapter(image)
+                                        val centerPoint = Point(frame.width / 2, frame.height / 2)
 
-                                val cameraProvider = cameraProviderFuture.get()
+                                        val name = ColorResolver.colorName(frame, centerPoint)
 
-                                val preview = Preview.Builder().build()
-                                preview.setSurfaceProvider(previewView.surfaceProvider)
+                                        val bytes = frame.getBytes()
+                                        val pixelIndex = (centerPoint.y * frame.width + centerPoint.x) * 4
+                                        val r = bytes[pixelIndex].toInt() and 0xFF
+                                        val g = bytes[pixelIndex + 1].toInt() and 0xFF
+                                        val b = bytes[pixelIndex + 2].toInt() and 0xFF
 
-                                val analysis = ImageAnalysis.Builder()
-                                    .setBackpressureStrategy(
-                                        ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
-                                    )
-                                    .build()
+                                        android.os.Handler(ctx.mainLooper).post {
+                                            rgbValue = "$r, $g, $b"
+                                            hexValue = "#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}".uppercase()
+                                            colorName = name
+                                            currentColor = Color(r, g, b)
+                                        }
 
-                                analysis.setAnalyzer(cameraExecutor) { image ->
+                                        image.close()
+                                    }
 
-                                    val frame = CameraFrameAdapter(image)
+                                    try {
+                                        cameraProvider.unbindAll()
 
-                                    val p = Point(
-                                        frame.width / 2,
-                                        frame.height / 2
-                                    )
+                                        val cameraSelector = if (isFrontCamera) {
+                                            CameraSelector.DEFAULT_FRONT_CAMERA
+                                        } else {
+                                            CameraSelector.DEFAULT_BACK_CAMERA
+                                        }
 
-                                    val name =
-                                        ColorResolver.colorName(frame, p)
+                                        cameraProvider.bindToLifecycle(
+                                            lifecycleOwner,
+                                            cameraSelector,
+                                            preview,
+                                            analysis
+                                        )
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
+                                }, ContextCompat.getMainExecutor(ctx))
 
-                                    colorName = name
-
-                                    image.close()
-                                }
-
-                                try {
-
-                                    cameraProvider.unbindAll()
-
-                                    cameraProvider.bindToLifecycle(
-                                        lifecycleOwner,
-                                        CameraSelector.DEFAULT_BACK_CAMERA,
-                                        preview,
-                                        analysis
-                                    )
-
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                }
-
-                            }, ContextCompat.getMainExecutor(ctx))
-
-                            previewView
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                                previewView
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
                     Box(
                         modifier = Modifier
@@ -165,9 +177,7 @@ fun CameraScreen(
                             )
                     )
                 }
-
             } else {
-
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -175,17 +185,13 @@ fun CameraScreen(
                         .background(Color.DarkGray),
                     contentAlignment = Alignment.Center
                 ) {
-
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-
                         Text(
                             text = "Нет доступа к камере",
                             color = Color.White,
                             fontSize = 18.sp
                         )
-
                         Spacer(modifier = Modifier.height(8.dp))
-
                         Text(
                             text = "Нажмите чтобы разрешить",
                             color = Color.White.copy(alpha = 0.7f),
@@ -204,7 +210,6 @@ fun CameraScreen(
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
-
                 Text(
                     text = colorName,
                     color = Color.White,
@@ -217,28 +222,45 @@ fun CameraScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 32.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-
                 Box(
                     modifier = Modifier
                         .size(50.dp)
                         .clip(CircleShape)
                         .background(Color.Gray)
-                )
+                        .clickable {
+                            // TODO: Открыть галерею
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "",
+                        color = Color.White,
+                        fontSize = 20.sp
+                    )
+                }
 
                 Box(
                     modifier = Modifier
                         .size(60.dp)
                         .clip(CircleShape)
                         .background(Color.White)
+                        .clickable {
+                            // TODO: Сохранить текущий цвет
+                        }
                 )
 
                 Box(
                     modifier = Modifier
                         .size(50.dp)
                         .clip(CircleShape)
-                        .background(Color.DarkGray),
+                        .background(Color.DarkGray)
+                        .clickable {
+                            isFrontCamera = !isFrontCamera
+                            cameraSelectorIndex++
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
