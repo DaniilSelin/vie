@@ -1,0 +1,19 @@
+{
+    "name": "Android Kotlin Builder (minimal)",
+    "image": "mingc/android-build-box:latest",
+    "runArgs": ["--rm"],
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/workspace,type=bind",
+    ],
+    "workspaceFolder": "/workspace",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack",
+                "mathiasfrohlich.Kotlin",
+                "fwcd.kotlin"
+            ]
+        }
+    },
+    "postCreateCommand": "echo 'Container ready! Use terminal to run gradle build'"
+}
