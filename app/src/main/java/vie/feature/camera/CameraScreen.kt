@@ -20,14 +20,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import android.view.MotionEvent
 import androidx.core.content.ContextCompat
-import java.util.concurrent.Executors
 
 import vie.feature.navigation.BottomNavigationBar
 import vie.feature.navigation.Tab
 import vie.core.impl.CameraFrameAdapter
 import vie.core.domain.ColorResolver
 import vie.core.data.Point
+import java.util.concurrent.Executors
 
 @Composable
 fun CameraScreen(
@@ -45,6 +46,7 @@ fun CameraScreen(
     var isFrontCamera by remember { mutableStateOf(false) }
 
     var cameraSelectorIndex by remember { mutableStateOf(0) }
+    var selectedPoint by remember { mutableStateOf<Point?>(null) }
 
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.hasPermission) {
@@ -116,23 +118,22 @@ fun CameraScreen(
 
                                     val analysis = ImageAnalysis.Builder()
                                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                                         .build()
 
                                     analysis.setAnalyzer(cameraExecutor) { image ->
                                         val frame = CameraFrameAdapter(image)
-                                        val centerPoint = Point(frame.width / 2, frame.height / 2)
+                                        val point = selectedPoint ?: Point(frame.width / 2, frame.height / 2)
+                                        val color = ColorResolver.extractColor(frame, point)
+                                        val name = ColorResolver.colorName(frame, point)
 
-                                        val name = ColorResolver.colorName(frame, centerPoint)
-
-                                        val bytes = frame.getBytes()
-                                        val pixelIndex = (centerPoint.y * frame.width + centerPoint.x) * 4
-                                        val r = bytes[pixelIndex].toInt() and 0xFF
-                                        val g = bytes[pixelIndex + 1].toInt() and 0xFF
-                                        val b = bytes[pixelIndex + 2].toInt() and 0xFF
+                                        val r = color.r;
+                                        val g = color.g;
+                                        val b = color.b;
 
                                         android.os.Handler(ctx.mainLooper).post {
                                             rgbValue = "$r, $g, $b"
-                                            hexValue = "#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}".uppercase()
+                                            hexValue = color.hexColorFormat()
                                             colorName = name
                                             currentColor = Color(r, g, b)
                                         }
@@ -162,6 +163,14 @@ fun CameraScreen(
 
                                 previewView
                             },
+                            update = { previewView ->
+                                previewView.setOnTouchListener { _, event ->
+                                    if (event.action == MotionEvent.ACTION_DOWN) {
+                                        selectedPoint = Point(event.x.toInt(), event.y.toInt())
+                                    }
+                                    false
+                                }
+                            }, // TODO: исправить баг с фиксацией курсора
                             modifier = Modifier.fillMaxSize()
                         )
                     }

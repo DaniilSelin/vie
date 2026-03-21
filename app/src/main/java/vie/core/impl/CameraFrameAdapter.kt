@@ -2,12 +2,7 @@ package vie.core.impl
 
 import androidx.camera.core.ImageProxy
 import vie.core.domain.ImageFrame
-import android.graphics.ImageFormat
-import android.graphics.YuvImage
-import android.graphics.Rect
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import java.io.ByteArrayOutputStream
+import vie.core.data.Point
 
 class CameraFrameAdapter(
     private val image: ImageProxy
@@ -19,36 +14,19 @@ class CameraFrameAdapter(
     override val height: Int
         get() = image.height
 
-    override fun getBytes(): ByteArray {
+    override fun getBytes(p: Point): ByteArray {
+        val plane = image.planes[0]
+        val buffer = plane.buffer
+        val rowStride = plane.rowStride
+        val pixelStride = plane.pixelStride
 
-        val bitmap = image.toBitmap()
-        val bytes = ByteArray(bitmap.width * bitmap.height * 4)
-        var index = 0
-        
-        for (y in 0 until bitmap.height) {
-            for (x in 0 until bitmap.width) {
-                val pixel = bitmap.getPixel(x, y)
-                bytes[index++] = (pixel shr 16 and 0xFF).toByte()
-                bytes[index++] = (pixel shr 8 and 0xFF).toByte()
-                bytes[index++] = (pixel and 0xFF).toByte()
-                bytes[index++] = (pixel shr 24 and 0xFF).toByte()
-            }
-        }
-        
-        bitmap.recycle()
+        val x = p.x.coerceIn(0, width - 1)
+        val y = p.y.coerceIn(0, height - 1)
+
+        val index = y * rowStride + x * pixelStride
+        buffer.position(index)
+        val bytes = ByteArray(4)
+        buffer.get(bytes)
         return bytes
-    }
-    
-    private fun ImageProxy.toBitmap(): Bitmap {
-
-        val yuvBytes = ByteArray(planes[0].buffer.remaining())
-        planes[0].buffer.get(yuvBytes)
-        
-        val yuvImage = YuvImage(yuvBytes, ImageFormat.NV21, width, height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, width, height), 100, out)
-        val jpegData = out.toByteArray()
-        
-        return BitmapFactory.decodeByteArray(jpegData, 0, jpegData.size)
     }
 }
