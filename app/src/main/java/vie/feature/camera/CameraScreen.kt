@@ -163,14 +163,6 @@ fun CameraScreen(
 
                                 previewView
                             },
-                            update = { previewView ->
-                                previewView.setOnTouchListener { _, event ->
-                                    if (event.action == MotionEvent.ACTION_DOWN) {
-                                        selectedPoint = Point(event.x.toInt(), event.y.toInt())
-                                    }
-                                    false
-                                }
-                            }, // TODO: исправить баг с фиксацией курсора
                             modifier = Modifier.fillMaxSize()
                         )
                     }
